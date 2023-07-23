@@ -39,6 +39,7 @@ private:
   int readingAccuracy = 2;
   int wateringTreshold;
   int wateringTime;
+  int wateringCycles = 0;
 
 public:
   int id;
@@ -91,7 +92,8 @@ public:
   }
 
   void loop() {
-    while (isWateringNeeded()) {
+    while (isWateringNeeded() && wateringCycles < 4) {
+      wateringCycles++;
       Serial.println("Watering...");
       startPump();
       delay(wateringTime * 1000);
@@ -134,10 +136,10 @@ public:
 };
 
 Plant plants[] = {
-  Plant(1, 35, 21, 1496, 1042, 30, 5),
-  Plant(2, 35, 21, 1496, 1042, 30, 3),
-  Plant(3, 35, 21, 1496, 1042, 30, 3),
-  Plant(4, 35, 21, 1496, 1042, 30, 3),
+  Plant(1, 35, 21, 1496, 1042, 30, 2),
+  Plant(2, 35, 21, 1496, 1042, 30, 2),
+  Plant(3, 35, 21, 1496, 1042, 30, 2),
+  Plant(4, 35, 21, 1496, 1042, 30, 2),
 };
 
 void setup() {
@@ -202,12 +204,25 @@ void loop() {
       String topic = "esp/plant/" + String(plant.id) + "/moisture";
       if (client.publish(topic.c_str(), String(plant.getMoisturePercentage()).c_str()))
           Serial.println(String(plant.getMoisturePercentage()) + "% published");
-      else Serial.println("Error publishing");
-      delay(200);
+      else{ 
+        Serial.println("Failed to publish");
+        for (int i = 0; i < 3; i++) {
+          if (client.connected()) break;
+          mqtt_reconnect();
+          client.loop();
+          delay(5000);
+          if (client.publish(topic.c_str(), String(plant.getMoisturePercentage()).c_str())) {
+            Serial.println(String(plant.getMoisturePercentage()) + "% published");
+            break;
+          }
+        }
+      }
+
     }
     Serial.println("===============================================");
 
     if (SLEEP_MODE) {
+      delay(200);
       WiFi.mode(WIFI_OFF);
       esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
       Serial.println("Going to sleep for " + String(TIME_TO_SLEEP) + " seconds");
